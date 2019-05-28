@@ -15,12 +15,18 @@ def welcome():
 @app.route('/api/run/qasm', methods=['POST'])
 def qasm():
     qasm = request.form.get('qasm')
+    api_token = None
+    if request.form.get('api_token'):
+        api_token = request.form.get('api_token')
     print("--------------")
-    print (qasm)
+    print(qasm)
     print(request.get_data())
-    print (request.form)
+    print(request.form)
     backend = 'qasm_simulator'
-    output = run_qasm(qasm, backend)
+    if api_token:
+        output = run_qasm(qasm, backend, api_token=api_token)
+    else:
+        output = run_qasm(qasm, backend)
     ret = {"result": output}
     return jsonify(ret)
 
