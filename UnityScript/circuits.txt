@@ -1,0 +1,47 @@
+_____________________________________________________________________________________________________________________
+-> Original <-
+_____________________________________________________________________________________________________________________
+
+
+
+"include \"qelib1.inc\"; qreg q[1]; creg c[1]; h q[0]; measure q[0] -> c[0];"
+
+
+_____________________________________________________________________________________________________________________
+-> C style seudocode for Hadamard preparation and collapsing of a n qubits register; output is a random n register <-
+_____________________________________________________________________________________________________________________
+
+MAX_QUBIT_AVALIBLE;
+
+func getRandomNRegister(n)
+
+    string qasmString = ""
+    nString = n.toString();
+
+    // Header
+    qasmString = qasmString + "include \"qelib1.inc\";";
+
+    // Registers
+    qasmString = qasmString + "qreg q[" + nString + "]; creg c[" + nString + "];";
+
+    // Circuit
+    if ( n <= MAX_QUBIT_AVALIBLE ) {
+
+        for (i = 0; i <= MAX_QUBIT_AVALIBLE - 1; i++) {
+
+            qasmString = qasmString + "h q[" + i.toString() + "];";
+
+        }
+        for (i = 0; i <= MAX_QUBIT_AVALIBLE - 1; i++) {
+
+            qasmString = qasmString + "measure q[" + i.toString() + "] -> c[" + i.toString() + "];";
+
+        }
+
+    } else {
+
+        throws Exception("qubit number must be " + MAX_QUBIT_AVALIBLE.toString() + " or less.");
+
+    }
+}
+_____________________________________________________________________________________________________________________
