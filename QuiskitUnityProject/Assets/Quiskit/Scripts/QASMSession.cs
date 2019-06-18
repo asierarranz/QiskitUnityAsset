@@ -33,7 +33,7 @@ public class QASMSession : MonoBehaviour {
 
     public static void Execute(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCode(qasmCode, onExecuted);
 
-    void ExecuteCode(string qasmCode, OnExecuted onExecuted) {
+    public void ExecuteCode(string qasmCode, OnExecuted onExecuted) {
 
         // API request
         List<IMultipartFormSection> formData = new List<IMultipartFormSection> {
@@ -46,7 +46,7 @@ public class QASMSession : MonoBehaviour {
         }
 
         // Request
-        UnityWebRequest www = UnityWebRequest.Post(/*"http://51.15.128.250:8001/api/run/qasm"*/ server + "/api/run/qasm", formData);
+        UnityWebRequest www = UnityWebRequest.Post(server + "/api/run/qasm", formData);
         www.SendWebRequest().completed += (_) => {
             Debug.Log("text: " + www.downloadHandler.text);
 
