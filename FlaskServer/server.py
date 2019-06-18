@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from flask import request
 from flask import jsonify
+from flask import Flask
 from api import run_qasm
 import json
 
