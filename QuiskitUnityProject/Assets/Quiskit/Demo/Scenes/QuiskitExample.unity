@@ -151,6 +151,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   apiTokenString: 
   server: http://localhost:8001
+  _maxQBitAvailable: 5
+  verbose: 1
+  useShots: 1
+  useMemory: 1
 --- !u!4 &6735064
 Transform:
   m_ObjectHideFlags: 0

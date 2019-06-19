@@ -16,8 +16,11 @@ public class QASMSession : MonoBehaviour {
 
     [Header("Debug")]
     public bool verbose = false;
+    public bool useShots = false;
+    public bool useMemory = false;
 
     public delegate void OnExecuted(QASMExecutionResult result);
+    public delegate void OnConfigurationAvailable(BackendConfiguration configuration);
 
     public static QASMSession _instance;
     public static QASMSession instance {
@@ -40,6 +43,41 @@ public class QASMSession : MonoBehaviour {
 
     public static void Execute(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCode(qasmCode, onExecuted);
 
+
+    [ContextMenu("GetBackendConfig")]
+    public void GetBackendConfig() {
+        GetBackendConfig((conf) => {
+            Debug.Log(conf.backend_name);
+        });
+    }
+    public void GetBackendConfig(OnConfigurationAvailable onExecuted) {
+
+        // API request
+        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
+
+        // Request
+        UnityWebRequest www = UnityWebRequest.Get(server + "/api/backend/configuration");
+        www.SendWebRequest().completed += (_) => {
+            if (verbose) Debug.Log("text: " + www.downloadHandler.text);
+
+            if (www.responseCode == 200) {
+                BackendConfiguration config = BackendConfiguration.CreateFromJSON(getResultJSON(www.downloadHandler.text));
+                onExecuted(config);
+            } else {
+                string responseCodeMessage = $"Response Code: {www.responseCode}";
+                if (www.responseCode == 500) {
+                    responseCodeMessage += " - Internal server error.";
+                    if (!string.IsNullOrEmpty(apiTokenString)) {
+                        responseCodeMessage += "\nIf you are using simulator, consider not to use apiTokenString.";
+                    }
+                }
+
+                Debug.LogError(responseCodeMessage);
+                throw new System.Exception(responseCodeMessage);
+            }
+        };
+    }
+
     public void ExecuteCode(string qasmCode, OnExecuted onExecuted) {
 
         // API request
@@ -50,6 +88,12 @@ public class QASMSession : MonoBehaviour {
         // Api token parameter
         if (apiTokenString != "") {
             formData.Add(new MultipartFormDataSection("api_token", apiTokenString));
+        }
+        if (useShots) {
+            formData.Add(new MultipartFormDataSection("shots", "64"));
+        }
+        if (useMemory) {
+            formData.Add(new MultipartFormDataSection("memory", "True"));
         }
 
         // Request
@@ -73,6 +117,18 @@ public class QASMSession : MonoBehaviour {
             }
         };
 
+    }
+
+    // Response: { "result":{ "0":539,"1":485} }
+    string getResultJSON(string jsonText) {
+        if (string.IsNullOrEmpty(jsonText)) return null;
+
+        char[] charsToTrim = { '{', ' ', '\n'};
+        jsonText = jsonText.Trim(charsToTrim);
+        jsonText = jsonText.Substring(jsonText.IndexOf('{'));
+        jsonText = jsonText.Substring(0, jsonText.Length - 1);
+
+        return jsonText;
     }
 
     // Response: { "result":{ "0":539,"1":485} }
