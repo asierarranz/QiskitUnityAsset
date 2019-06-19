@@ -9,8 +9,15 @@ public class QASMSession : MonoBehaviour {
     public string apiTokenString = "";
     // Server To Request
     public string server = "http://localhost:8001";
+    // Server config
+    [SerializeField]
+    private int _maxQBitAvailable = 5;
+    public int maxQubitAvailable => _maxQBitAvailable;
 
-    public delegate void OnExecuted(Dictionary<int, int> result);
+    [Header("Debug")]
+    public bool verbose = false;
+
+    public delegate void OnExecuted(QASMExecutionResult result);
 
     public static QASMSession _instance;
     public static QASMSession instance {
@@ -48,43 +55,41 @@ public class QASMSession : MonoBehaviour {
         // Request
         UnityWebRequest www = UnityWebRequest.Post(server + "/api/run/qasm", formData);
         www.SendWebRequest().completed += (_) => {
-            Debug.Log("text: " + www.downloadHandler.text);
+            if (verbose) Debug.Log("text: " + www.downloadHandler.text);
 
             if (www.responseCode == 200) {
                 onExecuted(readJSON(www.downloadHandler.text));
             } else {
-                string responseCodeMessage = "";
+                string responseCodeMessage = $"Response Code: {www.responseCode}";
                 if (www.responseCode == 500) {
-                    responseCodeMessage = "Internal server error.";
+                    responseCodeMessage += " - Internal server error.";
                     if (!string.IsNullOrEmpty(apiTokenString)) {
-                        responseCodeMessage += "If you are using simulator, consider not to use apiTokenString.";
+                        responseCodeMessage += "\nIf you are using simulator, consider not to use apiTokenString.";
                     }
-                } else {
-                    responseCodeMessage = $"Response Code: {www.responseCode}";
                 }
 
                 Debug.LogError(responseCodeMessage);
-                onExecuted(null);
+                throw new System.Exception(responseCodeMessage);
             }
         };
 
     }
-    
+
     // Response: { "result":{ "0":539,"1":485} }
-    Dictionary<int, int> readJSON(string jsonText) {
+    QASMExecutionResult readJSON(string jsonText) {
         if (string.IsNullOrEmpty(jsonText)) return null;
         char[] charsToTrim = { '{', ' ', '\n', '}' };
         jsonText = jsonText.Trim(charsToTrim);
         jsonText = jsonText.Substring(jsonText.IndexOf('{') + 1);
         string[] rawResultCollection = jsonText.Split(',');
-        Dictionary<int, int> table = new Dictionary<int, int>();
+        QASMExecutionResult executionResult = new QASMExecutionResult();
 
         foreach (string rawResult in rawResultCollection) {
             string[] keyValue = rawResult.Split(':');
             keyValue[0] = keyValue[0].Trim('"');
-            table.Add(System.Convert.ToInt32(keyValue[0], 2), System.Convert.ToInt32(keyValue[1]));
+            executionResult.Add(System.Convert.ToInt32(keyValue[0], 2), System.Convert.ToInt32(keyValue[1]));
         }
         
-        return table;
+        return executionResult;
     }
 }

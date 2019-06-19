@@ -32,8 +32,8 @@ measure q[9] -> c[9];";
 
     [ContextMenu("Execute")]
     private void Launch() {
-        QASMSession.Execute(qasmString, (result) => {
-            Debug.Log("Execution result count: " + result.Count);
+        QASMSession.Execute(qasmString, (response) => {
+            Debug.Log("Execution result count: " + response.result.Count);
         });
     }
 }
