@@ -90,25 +90,44 @@ public class QASMSession : MonoBehaviour {
 
         };
     }
-    
+
+    /// <summary>
+    /// Execute the given <code>qasmExe.code</code> launching <code>qasmExe.shots</code> executions.
+    /// When the result is ready, the <code>onExecuted</code> callback will be called.
+    /// The <see cref="OnExecuted"/> will recieve <see cref="QASMExecutionResult"/> 
+    /// with the perShot results as rawResult.
+    /// If the backends does not supports memory feature, the raw result will be simulated with
+    /// accumulated results.
+    /// </summary>
+    /// <param name="qasmExe">Executable configuration</param>
+    /// <param name="onExecuted">The callback called when execution ends</param>
     public void ExecuteCodeRawResult(QASMExecutable qasmExe, OnExecuted onExecuted) {
         RequestBackendConfig((_) => {
             GenericExecution(qasmExe, useMemory: _backendConfig.supportsMemory, (jsonResult) => {
                 if (_backendConfig.supportsMemory) {
                     onExecuted(readRawDataJSON(jsonResult));
                 } else {
-                    onExecuted(readCountJSON(jsonResult));
+                    QASMExecutionResult result = readCountJSON(jsonResult);
+                    result.SimulateRawResult();
+                    onExecuted(result);
                 }
             });
         });
     }
 
+    /// <summary>
+    /// Execute the given <code>qasmExe.code</code> launching <code>qasmExe.shots</code> executions.
+    /// When the result is ready, the <code>onExecuted</code> callback will be called.
+    /// The <see cref="OnExecuted"/> will recieve <see cref="QASMExecutionResult"/> 
+    /// with the accumulated result.
+    /// </summary>
+    /// <param name="qasmExe">Executable configuration</param>
+    /// <param name="onExecuted">The callback called when execution ends</param>
     public void ExecuteCode(QASMExecutable qasmExe, OnExecuted onExecuted) {
         // Request is not needed yet, see "ExecuteCodeRawResult" implementation in case of future changes
         GenericExecution(qasmExe, useMemory: false, (jsonResult) => {
             onExecuted(readCountJSON(jsonResult));
         });
-        
     }
 
     private void GenericExecution(QASMExecutable qasmExe, bool useMemory, OnJsonResult onJsonResult) {
@@ -205,16 +224,16 @@ public class QASMSession : MonoBehaviour {
 
 #if UNITY_EDITOR
     [ContextMenu("Get BackendConfig")]
-    public void GetBackendConfig() {
+    private void GetBackendConfig() {
         RequestBackendConfig((conf) => {
             Debug.Log(conf.backendName);
         });
     }
+#endif
 
     [ContextMenu("Clear BackendConfig")]
     public void ClearBackendConfig() {
         _backendConfig = null;
         _backendConfigRequest = null;
     }
-#endif
 }

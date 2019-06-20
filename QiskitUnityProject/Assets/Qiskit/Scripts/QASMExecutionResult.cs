@@ -16,6 +16,18 @@ public class QASMExecutionResult {
     public int maxKey { get; private set; } = 0;
     public int maxValue { get; private set; } = 0;
 
+    public void SimulateRawResult() {
+        _rawResult = new List<int>();
+
+        foreach (KeyValuePair<int, int> pair in _result) {
+            for (int i = 0; i < pair.Value; i++) {
+                _rawResult.Add(pair.Key);
+            }
+        }
+
+        Shuffle(_rawResult);
+    }
+
     public void Add(int key, int value) {
         _result.Add(key, value);
         if (maxValue < value) {
@@ -38,6 +50,20 @@ public class QASMExecutionResult {
         if (maxValue < value) {
             maxValue = value;
             maxKey = key;
+        }
+    }
+
+    /// <summary>
+    /// Shuffles the element order of the specified list.
+    /// </summary>
+    public static void Shuffle(List<int> list) {
+        int count = list.Count;
+        int last = count - 1;
+        for (int i = 0; i < last; ++i) {
+            int r = UnityEngine.Random.Range(i, count);
+            int tmp = list[i];
+            list[i] = list[r];
+            list[r] = tmp;
         }
     }
 }
