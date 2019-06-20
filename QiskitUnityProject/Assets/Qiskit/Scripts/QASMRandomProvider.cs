@@ -5,7 +5,7 @@ using UnityEngine;
 public class QASMRandomProvider : MonoBehaviour {
 
     private static readonly string _qasmSingleBoolCode = "include \"qelib1.inc\"; qreg q[1]; creg c[1]; h q[0]; measure q[0] -> c[0];";
-    private static string _qasmFourBitCode = "";
+    //private static string _qasmFourBitCode = "";
 
     [Header("Optional")]
     public QASMSession specificSession = null;
@@ -16,6 +16,7 @@ public class QASMRandomProvider : MonoBehaviour {
     public delegate void OnRandomByteGenerated(byte generated);
     public delegate void OnRandomIntGenerated(int generated);
     public delegate void OnRandomFloatGenerated(float generated);
+    
 
     public void GenerateBool(OnRandomBoolGenerated onRandomBoolGenerated) {
         // For bool values should be an even number of shots
@@ -27,39 +28,15 @@ public class QASMRandomProvider : MonoBehaviour {
     }
     
     public void GenerateByte(OnRandomByteGenerated onRandomByteGenerated) {
-        if (_qasmFourBitCode == "") {
-            _qasmFourBitCode = RandomNRegisterCode(4);
-        }
-        QASMExecutable qasmExe = new QASMExecutable(_qasmFourBitCode, 2);
-
-        executionSession.ExecuteCode(qasmExe, (response) => {
-            byte rnd = 0;
-            IEnumerator<int> keys = response.result.Keys.GetEnumerator();
-            if (!keys.MoveNext()) {
-                throw new System.Exception("Random byte genrated an empty response.");
-            } 
-
-            rnd += (byte)keys.Current;
-            if (keys.MoveNext()) {
-                rnd += (byte)(keys.Current << 4);
-            } else {
-                rnd += (byte)(rnd << 4);
-            }
-
-            onRandomByteGenerated(rnd);
-        });
+        GenerateIntNbits(8, (i) => onRandomByteGenerated((byte)i));
     }
 
     public void GenerateInt16(OnRandomIntGenerated onRandomIntGenerated) {
-        GenerateByte((b1) => {
-            GenerateByte((b2) => onRandomIntGenerated(b1 + (b2 << 8)));
-        });
+        GenerateIntNbits(16, onRandomIntGenerated);
     }
 
     public void GenerateInt32(OnRandomIntGenerated onRandomIntGenerated) {
-        GenerateInt16((i1) => {
-            GenerateInt16((i2) => onRandomIntGenerated(i1 + (i2 << 16)));
-        });
+        GenerateIntNbits(32, onRandomIntGenerated);
     }
 
     public void GenerateFloat(OnRandomFloatGenerated onRandomFloatGenerated) {
@@ -68,11 +45,28 @@ public class QASMRandomProvider : MonoBehaviour {
         });
     }
 
-    private string RandomNRegisterCode(int n) {
-        if (n > executionSession.maxQubitAvailable) {
-            throw new System.Exception("Requesting more qubits than Available");
-        }
+    public void GenerateIntNbits(int bits, OnRandomIntGenerated onRandomIntGenerated) {
+        executionSession.RequestBackendConfig((backendConfig) => {
+            int codeRegs = Mathf.Min(backendConfig.qubitsCount, bits);
+            int shotsNeeded = Mathf.CeilToInt((float)bits / codeRegs);
+            QASMExecutable qasmExe = new QASMExecutable(RandomNRegisterCode(codeRegs), shotsNeeded);
 
+            executionSession.ExecuteCodeRawResult(qasmExe, (response) => {
+                int rng = 0;
+                for (int i = 0; i < response.rawResult.Count; i++) {
+                    rng += response.rawResult[i] << (i * codeRegs);
+                }
+                if (bits < 32) {
+                    int mask = (1 << bits) - 1;
+                    rng &= mask;
+                }
+                onRandomIntGenerated(rng);
+            });
+        });
+    }
+
+
+    private string RandomNRegisterCode(int n) {
         // Header
         string qasmCode = "include \"qelib1.inc\";";
 
