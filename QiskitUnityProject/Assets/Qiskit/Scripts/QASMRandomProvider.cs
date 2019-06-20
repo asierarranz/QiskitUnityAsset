@@ -18,25 +18,35 @@ public class QASMRandomProvider : MonoBehaviour {
     public delegate void OnRandomFloatGenerated(float generated);
 
     public void GenerateBool(OnRandomBoolGenerated onRandomBoolGenerated) {
-        executionSession.ExecuteCode(_qasmSingleBoolCode, (response) => {
-            if (response.result.ContainsKey(1) && response.result[1] > 512) {
-                onRandomBoolGenerated(true);
-            } else {
-                onRandomBoolGenerated(false);
-            }
+        // For bool values should be an even number of shots
+        QASMExecutable qasmExe = new QASMExecutable(_qasmSingleBoolCode, 15);
+
+        executionSession.ExecuteCode(qasmExe, (response) => {
+            onRandomBoolGenerated(response.maxKey == 1);
         });
     }
-
+    
     public void GenerateByte(OnRandomByteGenerated onRandomByteGenerated) {
         if (_qasmFourBitCode == "") {
             _qasmFourBitCode = RandomNRegisterCode(4);
         }
+        QASMExecutable qasmExe = new QASMExecutable(_qasmFourBitCode, 2);
 
-        executionSession.ExecuteCode(_qasmFourBitCode, (response1) => {
-            executionSession.ExecuteCode(_qasmFourBitCode, (response2) => {
-                byte rnd2 = (byte)(response2.maxKey + (response1.maxKey << 4));
-                onRandomByteGenerated(rnd2);
-            });
+        executionSession.ExecuteCode(qasmExe, (response) => {
+            byte rnd = 0;
+            IEnumerator<int> keys = response.result.Keys.GetEnumerator();
+            if (!keys.MoveNext()) {
+                throw new System.Exception("Random byte genrated an empty response.");
+            } 
+
+            rnd += (byte)keys.Current;
+            if (keys.MoveNext()) {
+                rnd += (byte)(keys.Current << 4);
+            } else {
+                rnd += (byte)(rnd << 4);
+            }
+
+            onRandomByteGenerated(rnd);
         });
     }
 
