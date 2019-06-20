@@ -14,13 +14,17 @@ public class QASMSession : MonoBehaviour {
     private int _maxQBitAvailable = 5;
     public int maxQubitAvailable => _maxQBitAvailable;
 
+    private BackendConfiguration _backendConfig;
+    private UnityWebRequestAsyncOperation _backendConfigRequest;
+
     [Header("Debug")]
     public bool verbose = false;
-    public bool useShots = false;
-    public bool useMemory = false;
+
 
     public delegate void OnExecuted(QASMExecutionResult result);
     public delegate void OnConfigurationAvailable(BackendConfiguration configuration);
+
+    private delegate void OnJsonResult(string json);
 
     public static QASMSession _instance;
     public static QASMSession instance {
@@ -42,27 +46,35 @@ public class QASMSession : MonoBehaviour {
     }
 
     public static void Execute(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCode(qasmCode, onExecuted);
+    public static void ExecuteRawResult(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCodeRawResult(qasmCode, onExecuted);
+    
 
+    public void RequestBackendConfig(OnConfigurationAvailable onExecuted) {
 
-    [ContextMenu("GetBackendConfig")]
-    public void GetBackendConfig() {
-        GetBackendConfig((conf) => {
-            Debug.Log(conf.backend_name);
-        });
-    }
-    public void GetBackendConfig(OnConfigurationAvailable onExecuted) {
-
-        // API request
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
+        if (_backendConfig != null) {
+            onExecuted(_backendConfig);
+            return;
+        }
 
         // Request
-        UnityWebRequest www = UnityWebRequest.Get(server + "/api/backend/configuration");
-        www.SendWebRequest().completed += (_) => {
+        UnityWebRequest www;
+        // Check if other config request is running
+        if (_backendConfigRequest != null) {
+            www = _backendConfigRequest.webRequest;
+        } else {
+            www = UnityWebRequest.Get(server + "/api/backend/configuration");
+            _backendConfigRequest = www.SendWebRequest();
+        }
+            
+        _backendConfigRequest.completed += (_) => {
+            _backendConfigRequest = null;
+
             if (verbose) Debug.Log("text: " + www.downloadHandler.text);
 
             if (www.responseCode == 200) {
-                BackendConfiguration config = BackendConfiguration.CreateFromJSON(getResultJSON(www.downloadHandler.text));
-                onExecuted(config);
+                _backendConfig = BackendConfiguration.CreateFromJSON(getResultJSON(www.downloadHandler.text));
+                onExecuted(_backendConfig);
+
             } else {
                 string responseCodeMessage = $"Response Code: {www.responseCode}";
                 if (www.responseCode == 500) {
@@ -75,35 +87,55 @@ public class QASMSession : MonoBehaviour {
                 Debug.LogError(responseCodeMessage);
                 throw new System.Exception(responseCodeMessage);
             }
+
         };
     }
+    
+    public void ExecuteCodeRawResult(QASMExecutable qasmExe, OnExecuted onExecuted) {
+        RequestBackendConfig((_) => {
+            GenericExecution(qasmExe, useMemory: _backendConfig.supportsMemory, (jsonResult) => {
+                if (_backendConfig.supportsMemory) {
+                    onExecuted(readRawDataJSON(jsonResult));
+                } else {
+                    onExecuted(readCountJSON(jsonResult));
+                }
+            });
+        });
+    }
 
-    public void ExecuteCode(string qasmCode, OnExecuted onExecuted) {
+    public void ExecuteCode(QASMExecutable qasmExe, OnExecuted onExecuted) {
+        // Request is not needed yet, see "ExecuteCodeRawResult" implementation in case of future changes
+        GenericExecution(qasmExe, useMemory: false, (jsonResult) => {
+            onExecuted(readCountJSON(jsonResult));
+        });
+        
+    }
 
+    private void GenericExecution(QASMExecutable qasmExe, bool useMemory, OnJsonResult onJsonResult) {
         // API request
         List<IMultipartFormSection> formData = new List<IMultipartFormSection> {
             // QASM parameter
-            new MultipartFormDataSection("qasm", qasmCode)
+            new MultipartFormDataSection("qasm", qasmExe.code),
+            new MultipartFormDataSection("memory", useMemory ? "True" : "False")
         };
         // Api token parameter
         if (apiTokenString != "") {
             formData.Add(new MultipartFormDataSection("api_token", apiTokenString));
         }
-        if (useShots) {
-            formData.Add(new MultipartFormDataSection("shots", "64"));
+        // Number of shots
+        if (qasmExe.useShots) {
+            formData.Add(new MultipartFormDataSection("shots", $"{qasmExe.shots}"));
         }
-        if (useMemory) {
-            formData.Add(new MultipartFormDataSection("memory", "True"));
-        }
-
+        
         // Request
         UnityWebRequest www = UnityWebRequest.Post(server + "/api/run/qasm", formData);
         www.SendWebRequest().completed += (_) => {
             if (verbose) Debug.Log("text: " + www.downloadHandler.text);
 
-            if (www.responseCode == 200) {
-                onExecuted(readJSON(www.downloadHandler.text));
-            } else {
+            if (www.responseCode == 200) { // Is OK
+                onJsonResult(getResultJSON(www.downloadHandler.text));
+
+            } else { // ON ERROR
                 string responseCodeMessage = $"Response Code: {www.responseCode}";
                 if (www.responseCode == 500) {
                     responseCodeMessage += " - Internal server error.";
@@ -116,27 +148,31 @@ public class QASMSession : MonoBehaviour {
                 throw new System.Exception(responseCodeMessage);
             }
         };
-
     }
 
     // Response: { "result":{ "0":539,"1":485} }
-    string getResultJSON(string jsonText) {
+    private static string getResultJSON(string jsonText) {
         if (string.IsNullOrEmpty(jsonText)) return null;
 
-        char[] charsToTrim = { '{', ' ', '\n'};
-        jsonText = jsonText.Trim(charsToTrim);
-        jsonText = jsonText.Substring(jsonText.IndexOf('{'));
+        char[] initialCharsToTrim = { '{', ' ', '\n'};
+        jsonText = jsonText.Trim(initialCharsToTrim);
+        jsonText = jsonText.Substring(jsonText.IndexOf(':') + 1);
         jsonText = jsonText.Substring(0, jsonText.Length - 1);
+
+        // clean start and end
+        char[] finalCharsToTrim = { ' ', '\n' };
+        jsonText = jsonText.Trim(finalCharsToTrim);
 
         return jsonText;
     }
 
     // Response: { "result":{ "0":539,"1":485} }
-    QASMExecutionResult readJSON(string jsonText) {
+    private static QASMExecutionResult readCountJSON(string jsonText) {
         if (string.IsNullOrEmpty(jsonText)) return null;
-        char[] charsToTrim = { '{', ' ', '\n', '}' };
-        jsonText = jsonText.Trim(charsToTrim);
-        jsonText = jsonText.Substring(jsonText.IndexOf('{') + 1);
+        
+        jsonText = jsonText.TrimStart('{');
+        jsonText = jsonText.TrimEnd('}');
+
         string[] rawResultCollection = jsonText.Split(',');
         QASMExecutionResult executionResult = new QASMExecutionResult();
 
@@ -148,4 +184,36 @@ public class QASMSession : MonoBehaviour {
         
         return executionResult;
     }
+    
+    private static QASMExecutionResult readRawDataJSON(string jsonText) {
+        if (string.IsNullOrEmpty(jsonText)) return null;
+
+        jsonText = jsonText.TrimStart('[');
+        jsonText = jsonText.TrimEnd(']');
+        jsonText = jsonText.Replace("\"", "");
+
+        string[] rawResultCollection = jsonText.Split(',');
+        QASMExecutionResult executionResult = new QASMExecutionResult();
+
+        foreach (string rawResult in rawResultCollection) {
+            executionResult.Add(System.Convert.ToInt32(rawResult, 2));
+        }
+
+        return executionResult;
+    }
+
+#if UNITY_EDITOR
+    [ContextMenu("Get BackendConfig")]
+    public void GetBackendConfig() {
+        RequestBackendConfig((conf) => {
+            Debug.Log(conf.backendName);
+        });
+    }
+
+    [ContextMenu("Clear BackendConfig")]
+    public void ClearBackendConfig() {
+        _backendConfig = null;
+        _backendConfigRequest = null;
+    }
+#endif
 }
