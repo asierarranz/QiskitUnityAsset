@@ -68,9 +68,9 @@ public class QASMSession : MonoBehaviour {
             
         _backendConfigRequest.completed += (_) => {
             _backendConfigRequest = null;
-
+#if UNITY_EDITOR
             if (verbose) Debug.Log("text: " + www.downloadHandler.text);
-
+#endif
             if (www.responseCode == 200) {
                 _backendConfig = BackendConfiguration.CreateFromJSON(getResultJSON(www.downloadHandler.text));
                 onExecuted(_backendConfig);
@@ -130,8 +130,9 @@ public class QASMSession : MonoBehaviour {
         // Request
         UnityWebRequest www = UnityWebRequest.Post(server + "/api/run/qasm", formData);
         www.SendWebRequest().completed += (_) => {
+#if UNITY_EDITOR
             if (verbose) Debug.Log("text: " + www.downloadHandler.text);
-
+#endif
             if (www.responseCode == 200) { // Is OK
                 onJsonResult(getResultJSON(www.downloadHandler.text));
 
