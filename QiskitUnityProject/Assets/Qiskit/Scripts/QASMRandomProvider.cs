@@ -16,7 +16,8 @@ public class QASMRandomProvider : MonoBehaviour {
     public delegate void OnRandomByteGenerated(byte generated);
     public delegate void OnRandomIntGenerated(int generated);
     public delegate void OnRandomFloatGenerated(float generated);
-    
+
+    public delegate void OnRandomIntPoolGenerated(List<int> generated);
 
     public void GenerateBool(OnRandomBoolGenerated onRandomBoolGenerated) {
         // For bool values should be an even number of shots
@@ -65,6 +66,30 @@ public class QASMRandomProvider : MonoBehaviour {
         });
     }
 
+    public void GenerateIntNbitsPool(int bits, int count, OnRandomIntPoolGenerated onRandomIntPoolGenerated) {
+        executionSession.RequestBackendConfig((backendConfig) => {
+            int codeRegs = Mathf.Min(backendConfig.qubitsCount, bits);
+            int shotsNeededPerItem = Mathf.CeilToInt((float)bits / codeRegs);
+            QASMExecutable qasmExe = new QASMExecutable(RandomNRegisterCode(codeRegs), shotsNeededPerItem * count);
+
+            executionSession.ExecuteCodeRawResult(qasmExe, (response) => {
+                List<int> pool = new List<int>();
+                for (int i = 0; i < count; i++) {
+                    int rng = 0;
+                    int padding = i * shotsNeededPerItem;
+                    for (int j = 0; j < shotsNeededPerItem; j++) {
+                        rng += response.rawResult[j + padding] << (j * codeRegs);
+                    }
+                    if (bits < 32) {
+                        int mask = (1 << bits) - 1;
+                        rng &= mask;
+                    }
+                    pool.Add(rng);
+                }
+                onRandomIntPoolGenerated(pool);
+            });
+        });
+    }
 
     private string RandomNRegisterCode(int n) {
         // Header
@@ -100,6 +125,17 @@ public class QASMRandomProvider : MonoBehaviour {
     [ContextMenu("Generate Int32")]
     private void TryGenerateInt32() {
         GenerateInt32((b) => Debug.Log($"Generated int32: {b}"));
+    }
+    [ContextMenu("Generate 100 Int32")]
+    private void TryGenerateLotsOfInt32() {
+        GenerateIntNbitsPool(32, 100, (pool) => {
+            string s = "[ ";
+            foreach(int i in pool) {
+                s += $"{i}, ";
+            }
+            s += "]";
+            Debug.Log($"Generated: {s}");
+        });
     }
     [ContextMenu("Generate Float")]
     private void TryGenerateFloat() {
