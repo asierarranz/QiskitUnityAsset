@@ -49,7 +49,7 @@ public class QASMSession : MonoBehaviour {
     public static void ExecuteRawResult(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCodeRawResult(qasmCode, onExecuted);
 
     /// <summary>
-    /// The method makes an asyncronus request of the backend configuration data.
+    /// The method makes an asynchronous request of the backend configuration data.
     /// When the request is answered, the <see cref="OnConfigurationAvailable"/> 
     /// callback will be called.
     /// The <see cref="BackendConfiguration"/> is cached in order to improve subsequent calls.
