@@ -10,7 +10,7 @@ public class QASMExecutionResult {
     private Dictionary<int, int> _result = new Dictionary<int, int>();
     public IReadOnlyDictionary<int, int> result => _result;
 
-    public List<int> _rawResult = new List<int>();
+    private List<int> _rawResult = new List<int>();
     public IReadOnlyList<int> rawResult => _rawResult;
 
     public int maxKey { get; private set; } = 0;
