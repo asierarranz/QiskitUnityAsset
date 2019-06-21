@@ -19,7 +19,7 @@ public class QASMExecutable {
     }
 
 
-    //  User-defined conversion from double to Digit
+    //  User-defined conversion from string to QASMExecutable
     public static implicit operator QASMExecutable(string code) {
         return new QASMExecutable(code);
     }
