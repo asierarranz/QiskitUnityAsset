@@ -47,12 +47,19 @@ public class QASMSession : MonoBehaviour {
 
     public static void Execute(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCode(qasmCode, onExecuted);
     public static void ExecuteRawResult(string qasmCode, OnExecuted onExecuted) => instance?.ExecuteCodeRawResult(qasmCode, onExecuted);
-    
 
-    public void RequestBackendConfig(OnConfigurationAvailable onExecuted) {
+    /// <summary>
+    /// The method makes an asyncronus request of the backend configuration data.
+    /// When the request is answered, the <see cref="OnConfigurationAvailable"/> 
+    /// callback will be called.
+    /// The <see cref="BackendConfiguration"/> is cached in order to improve subsequent calls.
+    /// To clear cached configuration use the <see cref="ClearBackendConfig"/> method.
+    /// </summary>
+    /// <param name="onConfigurationAvailable">The callback called when the configuration is available</param>
+    public void RequestBackendConfig(OnConfigurationAvailable onConfigurationAvailable) {
 
         if (_backendConfig != null) {
-            onExecuted(_backendConfig);
+            onConfigurationAvailable(_backendConfig);
             return;
         }
 
@@ -72,8 +79,8 @@ public class QASMSession : MonoBehaviour {
             if (verbose) Debug.Log("text: " + www.downloadHandler.text);
 #endif
             if (www.responseCode == 200) {
-                _backendConfig = BackendConfiguration.CreateFromJSON(getResultJSON(www.downloadHandler.text));
-                onExecuted(_backendConfig);
+                _backendConfig = BackendConfiguration.CreateFromJSON(GetResultJSON(www.downloadHandler.text));
+                onConfigurationAvailable(_backendConfig);
 
             } else {
                 string responseCodeMessage = $"Response Code: {www.responseCode}";
@@ -95,7 +102,7 @@ public class QASMSession : MonoBehaviour {
     /// Execute the given <code>qasmExe.code</code> launching <code>qasmExe.shots</code> executions.
     /// When the result is ready, the <code>onExecuted</code> callback will be called.
     /// The <see cref="OnExecuted"/> will recieve <see cref="QASMExecutionResult"/> 
-    /// with the perShot results as rawResult.
+    /// with the per shot results as rawResult.
     /// If the backends does not supports memory feature, the raw result will be simulated with
     /// accumulated results.
     /// </summary>
@@ -105,9 +112,9 @@ public class QASMSession : MonoBehaviour {
         RequestBackendConfig((_) => {
             GenericExecution(qasmExe, useMemory: _backendConfig.supportsMemory, (jsonResult) => {
                 if (_backendConfig.supportsMemory) {
-                    onExecuted(readRawDataJSON(jsonResult));
+                    onExecuted(ReadRawDataJSON(jsonResult));
                 } else {
-                    QASMExecutionResult result = readCountJSON(jsonResult);
+                    QASMExecutionResult result = ReadCountJSON(jsonResult);
                     result.SimulateRawResult();
                     onExecuted(result);
                 }
@@ -126,7 +133,7 @@ public class QASMSession : MonoBehaviour {
     public void ExecuteCode(QASMExecutable qasmExe, OnExecuted onExecuted) {
         // Request is not needed yet, see "ExecuteCodeRawResult" implementation in case of future changes
         GenericExecution(qasmExe, useMemory: false, (jsonResult) => {
-            onExecuted(readCountJSON(jsonResult));
+            onExecuted(ReadCountJSON(jsonResult));
         });
     }
 
@@ -153,7 +160,7 @@ public class QASMSession : MonoBehaviour {
             if (verbose) Debug.Log("text: " + www.downloadHandler.text);
 #endif
             if (www.responseCode == 200) { // Is OK
-                onJsonResult(getResultJSON(www.downloadHandler.text));
+                onJsonResult(GetResultJSON(www.downloadHandler.text));
 
             } else { // ON ERROR
                 string responseCodeMessage = $"Response Code: {www.responseCode}";
@@ -169,9 +176,13 @@ public class QASMSession : MonoBehaviour {
             }
         };
     }
-
-    // Response: { "result":{ "0":539,"1":485} }
-    private static string getResultJSON(string jsonText) {
+    
+    /// <summary>
+    /// Clean result json.
+    /// </summary>
+    /// <param name="jsonText"></param>
+    /// <returns></returns>
+    private static string GetResultJSON(string jsonText) {
         if (string.IsNullOrEmpty(jsonText)) return null;
 
         char[] initialCharsToTrim = { '{', ' ', '\n'};
@@ -185,9 +196,14 @@ public class QASMSession : MonoBehaviour {
 
         return jsonText;
     }
-
-    // Response: { "result":{ "0":539,"1":485} }
-    private static QASMExecutionResult readCountJSON(string jsonText) {
+    
+    /// <summary>
+    /// Extracts from a clean json (see <see cref="GetResultJSON(string)"/>)
+    /// the accumulated qasm results.
+    /// </summary>
+    /// <param name="jsonText"></param>
+    /// <returns></returns>
+    private static QASMExecutionResult ReadCountJSON(string jsonText) {
         if (string.IsNullOrEmpty(jsonText)) return null;
         
         jsonText = jsonText.TrimStart('{');
@@ -204,8 +220,14 @@ public class QASMSession : MonoBehaviour {
         
         return executionResult;
     }
-    
-    private static QASMExecutionResult readRawDataJSON(string jsonText) {
+
+    /// <summary>
+    /// Extracts from a clean json (see <see cref="GetResultJSON(string)"/>)
+    /// the pershot qasm results.
+    /// </summary>
+    /// <param name="jsonText"></param>
+    /// <returns></returns>
+    private static QASMExecutionResult ReadRawDataJSON(string jsonText) {
         if (string.IsNullOrEmpty(jsonText)) return null;
 
         jsonText = jsonText.TrimStart('[');
@@ -222,6 +244,16 @@ public class QASMSession : MonoBehaviour {
         return executionResult;
     }
 
+    /// <summary>
+    /// Clear cached backend configurations and currently running requests.
+    /// </summary>
+    [ContextMenu("Clear BackendConfig")]
+    public void ClearBackendConfig() {
+        _backendConfig = null;
+        _backendConfigRequest.webRequest.Dispose();
+        _backendConfigRequest = null;
+    }
+
 #if UNITY_EDITOR
     [ContextMenu("Get BackendConfig")]
     private void GetBackendConfig() {
@@ -230,10 +262,4 @@ public class QASMSession : MonoBehaviour {
         });
     }
 #endif
-
-    [ContextMenu("Clear BackendConfig")]
-    public void ClearBackendConfig() {
-        _backendConfig = null;
-        _backendConfigRequest = null;
-    }
 }
