@@ -250,7 +250,7 @@ public class QASMSession : MonoBehaviour {
     [ContextMenu("Clear BackendConfig")]
     public void ClearBackendConfig() {
         _backendConfig = null;
-        _backendConfigRequest.webRequest.Dispose();
+        _backendConfigRequest?.webRequest?.Dispose();
         _backendConfigRequest = null;
     }
 
