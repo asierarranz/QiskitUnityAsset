@@ -4,6 +4,28 @@ using UnityEngine;
 
 public class QASMRandomProvider : MonoBehaviour {
 
+    /*
+     * Optimization: the reinterpret casts (bitwise) and other features
+     * could be optimized using StructLayout.
+     * 
+     * https://docs.microsoft.com/es-es/dotnet/api/system.runtime.interopservices.structlayoutattribute?view=netframework-4.8
+     * 
+     * Example:
+     * [StructLayout(LayoutKind.Explicit)]
+     * private struct IntFloat {
+     *     [FieldOffset(0)]
+     *     public int IntValue;
+     *     [FieldOffset(0)]
+     *     public float FloatValue;
+     * }
+     * 
+     * .....
+     * IntFloat intFloat = new IntFloat { FloatValue = 3.8f };
+     * int floatAsInt = intFloat.IntValue;
+     * .....
+     * 
+     */
+
     private static readonly string _qasmSingleBoolCode = "include \"qelib1.inc\"; qreg q[1]; creg c[1]; h q[0]; measure q[0] -> c[0];";
     //private static string _qasmFourBitCode = "";
 
@@ -77,7 +99,21 @@ public class QASMRandomProvider : MonoBehaviour {
     /// <param name="onRandomFloatGenerated">The callback called when the float is available</param>
     public void GenerateFloat(OnRandomFloatGenerated onRandomFloatGenerated) {
         GenerateInt32((i) => {
-            onRandomFloatGenerated(Mathf.Abs((float)i / int.MaxValue));
+            onRandomFloatGenerated(Int32ToFloat(i));
+        });
+    }
+
+    /// <summary>
+    /// Generates a true random float in the range [<paramref name="min"/>, <paramref name="max"/>].
+    /// It makes an asynchronous operation so the value is returned through 
+    /// the callback <see cref="OnRandomFloatGenerated"/>
+    /// </summary>
+    /// <param name="min">The smallest number generated</param>
+    /// <param name="max">The largest number generated</param>
+    /// <param name="onRandomFloatGenerated">The callback called when the float is available</param>
+    public void GenerateFloatInRange(float min, float max,OnRandomFloatGenerated onRandomFloatGenerated) {
+        GenerateInt32((i) => {
+            onRandomFloatGenerated(Int32ToFloat(i, min, max));
         });
     }
 
@@ -169,7 +205,7 @@ public class QASMRandomProvider : MonoBehaviour {
     }
 
     /// <summary>
-    /// Generates a pool of <paramref name="count"/> true random floats.
+    /// Generates a pool of <paramref name="count"/> true random floats in the range [0, 1].
     /// It makes an asynchronous operation so the value is returned through 
     /// the callback <see cref="OnRandomFloatPoolGenerated"/>.
     /// </summary>
@@ -179,11 +215,32 @@ public class QASMRandomProvider : MonoBehaviour {
         GenerateIntNbitsPool(32, count, (intPool) => {
             List<float> floatPool = new List<float>();
             foreach (int i in intPool) {
-                floatPool.Add(Mathf.Abs((float)i / int.MaxValue));
+                floatPool.Add(Int32ToFloat(i));
             }
             onRandomFloatPoolGenerated(floatPool);
         });
     }
+
+    /// <summary>
+    /// Generates a pool of <paramref name="count"/> true random floats in the range [<paramref name="min"/>, <paramref name="max"/>].
+    /// It makes an asynchronous operation so the value is returned through 
+    /// the callback <see cref="OnRandomFloatPoolGenerated"/>.
+    /// </summary>
+    /// <param name="count">The amount of floats generated</param>
+    /// <param name="min">The smallest number generated</param>
+    /// <param name="max">The largest number generated</param>
+    /// <param name="onRandomFloatPoolGenerated">The callback called when the pool is available</param>
+    public void GenerateFloatPoolInRange(int count, float min, float max, OnRandomFloatPoolGenerated onRandomFloatPoolGenerated) {
+        GenerateIntNbitsPool(32, count, (intPool) => {
+            List<float> floatPool = new List<float>();
+            foreach (int i in intPool) {
+                floatPool.Add(Int32ToFloat(i, min, max));
+            }
+            onRandomFloatPoolGenerated(floatPool);
+        });
+    }
+
+
 
     /// <summary>
     /// Generates a pool of <paramref name="count"/> true random ints of n <paramref name="bits"/>.
@@ -255,6 +312,14 @@ public class QASMRandomProvider : MonoBehaviour {
         return qasmCode;
     }
 
+    private float Int32ToFloat(int i) {
+        return Mathf.Abs((float)i / int.MaxValue);
+    }
+
+    private float Int32ToFloat(int i, float min, float max) {
+        return Int32ToFloat(i) * (max - min) + min;
+    }
+
 #if UNITY_EDITOR
     #region Test methods
     [ContextMenu("Generate Bool")]
@@ -321,9 +386,24 @@ public class QASMRandomProvider : MonoBehaviour {
     private void TryGenerateFloat() {
         GenerateFloat((b) => Debug.Log($"Generated float: {b}"));
     }
+    [ContextMenu("Generate Float Range [3, 10]")]
+    private void TryGenerateFloatRange() {
+        GenerateFloatInRange(3f, 10f, (b) => Debug.Log($"Generated float: {b}"));
+    }
     [ContextMenu("Generate 100 float")]
     private void TryGenerateLotsOfFloat() {
         GenerateFloatPool(100, (pool) => {
+            string s = "[ ";
+            foreach (float i in pool) {
+                s += $"{i}, ";
+            }
+            s += "]";
+            Debug.Log($"Generated: {s}");
+        });
+    }
+    [ContextMenu("Generate 100 float [-4, 4]")]
+    private void TryGenerateLotsOfFloatRange() {
+        GenerateFloatPoolInRange(100, -4f, 4f, (pool) => {
             string s = "[ ";
             foreach (float i in pool) {
                 s += $"{i}, ";
